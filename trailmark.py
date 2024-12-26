@@ -100,9 +100,14 @@ def add_path_comment(filepath: Path, root_dir: Path) -> None:
         print(f"Skipping unsupported file type: {filepath}")
         return
 
-    if content.startswith(comment):
-        print(f"Comment already exists in: {filepath}")
-        return
+    # Check first non-empty line for any kind of path comment
+    first_lines = [line.strip() for line in content.split('\n') if line.strip()]
+    if first_lines:
+        first_line = first_lines[0]
+        # Check for path comments in any supported format
+        if any(x in first_line.lower() for x in ['path:', 'path :']):
+            print(f"Path comment already exists in: {filepath}")
+            return
 
     try:
         with open(filepath, 'w', encoding='utf-8') as f:
@@ -120,10 +125,44 @@ def process_files(directory: Path, excluded_paths: Set[Path]) -> None:
         if item.is_file():
             add_path_comment(item, directory)
 
+def load_default_excludes() -> set:
+    """Load default exclusions from .trailmarkignore file."""
+    excludes = set()
+    config_files = [
+        # Look for config in current directory
+        Path('.trailmarkignore'),
+        # Look for config in user's home directory
+        Path.home() / '.trailmarkignore',
+        # Look for config in the same directory as the script
+        Path(__file__).parent / '.trailmarkignore'
+    ]
+
+    for config_file in config_files:
+        if config_file.is_file():
+            try:
+                with open(config_file, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#'):
+                            excludes.add(line)
+            except Exception as e:
+                print(f"Warning: Error reading {config_file}: {e}")
+
+    return excludes
+
+# Load default excludes
+DEFAULT_EXCLUDES = load_default_excludes()
+
 def main():
-    parser = argparse.ArgumentParser(description='Interactively add path comments to files.')
+    parser = argparse.ArgumentParser(description='Add path comments to files recursively.')
     parser.add_argument('directory', nargs='?', default=os.getcwd(),
                       help='Directory to process (default: current directory)')
+    parser.add_argument('-i', '--interactive', action='store_true',
+                      help='Run in interactive mode to select directories to exclude')
+    parser.add_argument('-a', '--all', action='store_true',
+                      help='Process all directories (ignore .trailmarkignore)')
+    parser.add_argument('-e', '--exclude', nargs='+', default=[],
+                      help='Additional directories to exclude')
     
     args = parser.parse_args()
     root_dir = Path(args.directory)
@@ -132,12 +171,38 @@ def main():
         print(f"Error: {root_dir} is not a valid directory")
         sys.exit(1)
 
-    print("\nWelcome to the interactive directory selector!")
-    print("Navigate through directories and mark which ones to exclude.")
-    print("Use numbers to navigate, 'e' to exclude/include, 'f' to finish, 'q' to quit.\n")
+    excluded_paths = set()
 
-    selector = DirectorySelector(root_dir)
-    excluded_paths = selector.run()
+    # Handle different modes
+    if args.interactive:
+        print("\nWelcome to the interactive directory selector!")
+        print("Navigate through directories and mark which ones to exclude.")
+        print("Use numbers to navigate, 'e' to exclude/include, 'f' to finish, 'q' to quit.\n")
+        
+        selector = DirectorySelector(root_dir)
+        excluded_paths = selector.run()
+    else:
+        # Add default exclusions unless -a flag is used
+        if not args.all:
+            # Find all instances of default excluded directories
+            for exclude_dir in DEFAULT_EXCLUDES:
+                for path in root_dir.rglob(exclude_dir):
+                    if path.is_dir():
+                        excluded_paths.add(path)
+        
+        # Add any additional excluded directories from -e flag
+        for exclude_dir in args.exclude:
+            for path in root_dir.rglob(exclude_dir):
+                if path.is_dir():
+                    excluded_paths.add(path)
+
+    # Print summary of what will be excluded
+    if excluded_paths:
+        print("\nExcluded directories:")
+        for path in sorted(excluded_paths):
+            print(f"- {path.relative_to(root_dir)}")
+    else:
+        print("\nNo directories excluded")
 
     print("\nProcessing files...")
     process_files(root_dir, excluded_paths)

@@ -6,10 +6,21 @@ TrailMark is a utility that recursively processes files in a directory and adds 
 
 - Automatically adds path comments to files based on their extension
 - Smart comment syntax based on file type
+- Skips files that already have path comments
 - Interactive directory selection mode
-- Configurable directory exclusions
+- Configurable directory exclusions via .trailmarkignore
 - Available in both Python and Bash implementations
-- Automatically excludes common directories like `node_modules` and `.git`
+
+## File Processing
+
+TrailMark processes files in the following way:
+
+1. Checks if the file already has a path comment at the top
+   - If a path comment exists (in any supported format), the file is skipped
+   - Path comments are identified by the presence of "Path:" (case insensitive)
+2. Determines the appropriate comment syntax based on file extension
+3. Adds the relative path as a comment at the top of the file
+4. Preserves the original file content
 
 ## Supported File Types
 
@@ -19,6 +30,36 @@ TrailMark automatically uses the appropriate comment syntax for different file t
 - JavaScript/Java/C++/C#/PHP: `// Path: relative/path/to/file`
 - HTML/XML: `<!-- Path: relative/path/to/file -->`
 - CSS: `/* Path: relative/path/to/file */`
+
+## Configuration
+
+TrailMark uses a `.trailmarkignore` file to specify which directories should be excluded by default. The file can be placed in:
+
+1. The current directory
+2. Your home directory (`~/.trailmarkignore`)
+3. The same directory as the script
+
+The `.trailmarkignore` file should contain one directory name per line. Lines starting with `#` are treated as comments. Example:
+
+```plaintext
+# Package managers
+node_modules
+venv
+vendor
+
+# Version control
+.git
+.svn
+
+# Build directories
+dist
+build
+target
+
+# Add your own exclusions here
+```
+
+If multiple `.trailmarkignore` files exist, they will all be read and their exclusions combined.
 
 ## Installation
 
@@ -55,7 +96,7 @@ Both versions support the same command-line options:
 ### Command Line Options
 
 - `-i, --interactive`: Run in interactive mode to manually select directories to exclude
-- `-a, --all`: Process all directories (including those normally excluded by default)
+- `-a, --all`: Process all directories (ignore .trailmarkignore)
 - `-e, --exclude`: Specify additional directories to exclude
   - Python: Space-separated list (`-e dist build temp`)
   - Bash: Comma-separated list (`-e dist,build,temp`)
@@ -66,13 +107,14 @@ Both versions support the same command-line options:
 By default (no flags), TrailMark will:
 
 - Process the current directory if no directory is specified
-- Automatically exclude `node_modules` and `.git` directories
+- Exclude directories listed in .trailmarkignore
 - Process all supported file types
-- Add path comments to files that don't already have them
+- Skip files that already have path comments
+- Add path comments to files that don't have them
 
 ### Examples
 
-1. Process current directory (excluding node_modules and .git):
+1. Process current directory using .trailmarkignore:
 
 ```bash
 ./trailmark.py
@@ -96,7 +138,7 @@ By default (no flags), TrailMark will:
 ./trailmark.sh -i
 ```
 
-4. Process all directories (including node_modules and .git):
+4. Process all directories (ignore .trailmarkignore):
 
 ```bash
 ./trailmark.py -a
@@ -173,8 +215,9 @@ While both versions provide the same functionality, there are some implementatio
 
 ## Tips
 
+- Create a .trailmarkignore file to define your standard exclusions
 - Run in interactive mode first to see the directory structure and decide what to exclude
-- Use the `-a` flag when you need to process everything, including normally excluded directories
+- Use the `-a` flag when you need to process everything, ignoring .trailmarkignore
 - Check the script output for any skipped files or errors
 - Make sure you have appropriate permissions for all directories you want to process
 

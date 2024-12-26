@@ -1,0 +1,35 @@
+# Default directories to exclude
+# One directory per line
+# Lines starting with # are comments
+
+# Package managers
+node_modules
+venv
+.virtualenv
+vendor
+
+# Version control
+.git
+.svn
+.hg
+
+# Build directories
+dist
+build
+target
+
+# Cache directories
+__pycache__
+.cache
+.npm
+.yarn
+
+# IDE directories
+.idea
+.vscode
+.vs
+
+# Misc
+tmp
+temp
+logs

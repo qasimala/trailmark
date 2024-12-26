@@ -1,7 +1,31 @@
 #!/bin/bash
 
+# Load default excludes from .trailmarkignore
+load_default_excludes() {
+    local config_files=(
+        ".trailmarkignore"                    # Current directory
+        "$HOME/.trailmarkignore"              # Home directory
+        "$(dirname "$0")/.trailmarkignore"    # Script directory
+    )
+    
+    local excludes=()
+    
+    for config_file in "${config_files[@]}"; do
+        if [ -f "$config_file" ]; then
+            while IFS= read -r line || [ -n "$line" ]; do
+                line=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                if [ -n "$line" ] && ! [[ "$line" =~ ^# ]]; then
+                    excludes+=("$line")
+                fi
+            done < "$config_file"
+        fi
+    done
+    
+    echo "${excludes[@]}"
+}
+
 # Default settings
-DEFAULT_EXCLUDES=("node_modules" ".git")
+DEFAULT_EXCLUDES=($(load_default_excludes))
 INTERACTIVE=false
 PROCESS_ALL=false
 EXCLUDED_DIRS=()
@@ -11,7 +35,7 @@ usage() {
     echo "Usage: $0 [-i] [-a] [-e dir1,dir2,...] [directory]"
     echo "Options:"
     echo "  -i    Interactive mode"
-    echo "  -a    Process all directories (including node_modules and .git)"
+    echo "  -a    Process all directories (ignore .trailmarkignore)"
     echo "  -e    Additional directories to exclude (comma-separated)"
     echo "  -h    Show this help message"
     exit 1
@@ -23,6 +47,13 @@ add_comment() {
     local rel_path="$2"
     local ext="${file##*.}"
     local temp_file=$(mktemp)
+    
+    # Check if file already has a path comment
+    if [ -f "$file" ] && grep -qi "path:" "$file" | head -n 1; then
+        echo "Path comment already exists in: $file"
+        rm "$temp_file"
+        return
+    fi
     
     # Define comment style based on extension
     case "$ext" in
