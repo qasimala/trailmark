@@ -1,21 +1,82 @@
-# Path: trailmark.py
 import os
 import sys
-import argparse
 from pathlib import Path
+import argparse
+from typing import Set, List
+
+class DirectorySelector:
+    def __init__(self, root_dir: Path):
+        self.root_dir = root_dir
+        self.excluded_paths: Set[Path] = set()
+        self.current_path = root_dir
+
+    def get_subdirectories(self, path: Path) -> List[Path]:
+        """Get all immediate subdirectories of the given path."""
+        try:
+            return sorted([p for p in path.iterdir() if p.is_dir() and not p.name.startswith('.')])
+        except PermissionError:
+            print(f"Permission denied: {path}")
+            return []
+
+    def display_menu(self) -> None:
+        """Display the current directory and available options."""
+        print("\n" + "=" * 60)
+        print(f"Current directory: {self.current_path}")
+        print("=" * 60)
+
+        # Show parent directory option if not at root
+        if self.current_path != self.root_dir:
+            print("0: [↑] Go up to parent directory")
+
+        # List all subdirectories
+        subdirs = self.get_subdirectories(self.current_path)
+        for i, path in enumerate(subdirs, 1):
+            status = "[EXCLUDED]" if path in self.excluded_paths else ""
+            rel_path = path.relative_to(self.root_dir)
+            print(f"{i}: {'  ' * (len(path.parts) - len(self.root_dir.parts))}{path.name} {status}")
+
+        print("\nCommands:")
+        print("e: Exclude/Include current directory")
+        print("f: Finish selection")
+        print("q: Quit without saving")
+
+    def run(self) -> Set[Path]:
+        """Run the interactive directory selector."""
+        while True:
+            self.display_menu()
+            choice = input("\nEnter your choice: ").strip().lower()
+
+            if choice == 'q':
+                sys.exit(0)
+            elif choice == 'f':
+                return self.excluded_paths
+            elif choice == 'e':
+                if self.current_path != self.root_dir:
+                    if self.current_path in self.excluded_paths:
+                        self.excluded_paths.remove(self.current_path)
+                        print(f"\nUnexcluded: {self.current_path}")
+                    else:
+                        self.excluded_paths.add(self.current_path)
+                        print(f"\nExcluded: {self.current_path}")
+                else:
+                    print("\nCannot exclude root directory!")
+            elif choice == '0' and self.current_path != self.root_dir:
+                self.current_path = self.current_path.parent
+            else:
+                try:
+                    idx = int(choice) - 1
+                    subdirs = self.get_subdirectories(self.current_path)
+                    if 0 <= idx < len(subdirs):
+                        self.current_path = subdirs[idx]
+                    else:
+                        print("\nInvalid choice!")
+                except ValueError:
+                    print("\nInvalid input!")
 
 def add_path_comment(filepath: Path, root_dir: Path) -> None:
-    """
-    Add relative path as a comment to the top of the file.
-    
-    Args:
-        filepath: Path object of the file to process
-        root_dir: Path object of the root directory
-    """
-    # Get relative path from root directory
+    """Add relative path as a comment to the top of the file."""
     rel_path = filepath.relative_to(root_dir)
     
-    # Read the current content of the file
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -26,7 +87,6 @@ def add_path_comment(filepath: Path, root_dir: Path) -> None:
         print(f"Error reading file {filepath}: {e}")
         return
 
-    # Create the comment based on file extension
     extension = filepath.suffix.lower()
     if extension in ['.py', '.sh', '.rb', '.pl']:
         comment = f"# Path: {rel_path}\n"
@@ -40,12 +100,10 @@ def add_path_comment(filepath: Path, root_dir: Path) -> None:
         print(f"Skipping unsupported file type: {filepath}")
         return
 
-    # Check if the comment already exists
     if content.startswith(comment):
         print(f"Comment already exists in: {filepath}")
         return
 
-    # Write the comment and original content back to the file
     try:
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(comment + content)
@@ -53,79 +111,37 @@ def add_path_comment(filepath: Path, root_dir: Path) -> None:
     except Exception as e:
         print(f"Error writing to file {filepath}: {e}")
 
-def should_exclude(path: Path, exclude_patterns: list[str], root_dir: Path) -> bool:
-    """
-    Check if a path should be excluded based on exclusion patterns.
-    
-    Args:
-        path: Path to check
-        exclude_patterns: List of patterns to exclude
-        root_dir: Root directory being processed
-    
-    Returns:
-        bool: True if path should be excluded, False otherwise
-    """
-    # Get relative path from root directory
-    try:
-        rel_path = path.relative_to(root_dir)
-        # Convert to string with forward slashes for consistent matching
-        rel_path_str = str(rel_path).replace(os.sep, '/')
-        
-        for pattern in exclude_patterns:
-            # Convert pattern to use forward slashes
-            pattern = pattern.replace(os.sep, '/')
-            
-            # Check if pattern matches at any level
-            if pattern in rel_path_str.split('/'):
-                return True
-                
-            # Check if pattern matches the path or any parent
-            if rel_path_str == pattern or rel_path_str.startswith(pattern + '/'):
-                return True
-                
-        return False
-    except ValueError:
-        # If path is not relative to root_dir, don't exclude
-        return False
-def process_directory(directory: Path, exclude_patterns: list[str]) -> None:
-    """
-    Recursively process all files in the given directory.
-    
-    Args:
-        directory: Path object of the directory to process
-        exclude_patterns: List of path patterns to exclude
-    """
-    try:
-        # Process all files in the directory
-        for item in directory.rglob('*'):
-            # Skip excluded paths
-            if should_exclude(item, exclude_patterns, directory):
-                continue
-            if item.is_file():
-                add_path_comment(item, directory)
-    except Exception as e:
-        print(f"Error processing directory {directory}: {e}")
+def process_files(directory: Path, excluded_paths: Set[Path]) -> None:
+    """Process all files in directory, excluding specified paths."""
+    for item in directory.rglob('*'):
+        # Skip excluded paths and their children
+        if any(str(item).startswith(str(excluded)) for excluded in excluded_paths):
+            continue
+        if item.is_file():
+            add_path_comment(item, directory)
 
 def main():
-    # Set up argument parser
-    parser = argparse.ArgumentParser(description='Add relative path comments to files recursively.')
+    parser = argparse.ArgumentParser(description='Interactively add path comments to files.')
     parser.add_argument('directory', nargs='?', default=os.getcwd(),
                       help='Directory to process (default: current directory)')
-    parser.add_argument('-e', '--exclude', nargs='+', default=[],
-                      help='Paths to exclude (e.g., -e node_modules src/temp docs/drafts)')
     
     args = parser.parse_args()
-    directory = Path(args.directory)
+    root_dir = Path(args.directory)
 
-    # Verify directory exists
-    if not directory.exists() or not directory.is_dir():
-        print(f"Error: {directory} is not a valid directory")
+    if not root_dir.exists() or not root_dir.is_dir():
+        print(f"Error: {root_dir} is not a valid directory")
         sys.exit(1)
 
-    print(f"Processing directory: {directory}")
-    print(f"Excluding paths: {', '.join(args.exclude) if args.exclude else 'None'}")
-    process_directory(directory, args.exclude)
-    print("Processing complete!")
+    print("\nWelcome to the interactive directory selector!")
+    print("Navigate through directories and mark which ones to exclude.")
+    print("Use numbers to navigate, 'e' to exclude/include, 'f' to finish, 'q' to quit.\n")
+
+    selector = DirectorySelector(root_dir)
+    excluded_paths = selector.run()
+
+    print("\nProcessing files...")
+    process_files(root_dir, excluded_paths)
+    print("Complete!")
 
 if __name__ == "__main__":
     main()
