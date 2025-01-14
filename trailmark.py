@@ -90,7 +90,7 @@ def add_path_comment(filepath: Path, root_dir: Path) -> None:
     extension = filepath.suffix.lower()
     if extension in ['.py', '.sh', '.rb', '.pl']:
         comment = f"# Path: {rel_path}\n"
-    elif extension in ['.js', '.java', '.cpp', '.c', '.cs', '.php']:
+    elif extension in ['.js', '.java', '.cpp', '.c', '.cs', '.php', '.ts']:
         comment = f"// Path: {rel_path}\n"
     elif extension in ['.html', '.xml']:
         comment = f"<!-- Path: {rel_path} -->\n"
