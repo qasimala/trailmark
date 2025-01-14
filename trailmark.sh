@@ -60,7 +60,7 @@ add_comment() {
         py|sh|rb|pl)
             echo "# Path: $rel_path" > "$temp_file"
             ;;
-        js|java|cpp|c|cs|php|ts)
+        js|java|cpp|c|cs|php|ts|tsx)
             echo "// Path: $rel_path" > "$temp_file"
             ;;
         html|xml)
